@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Correos de alertas</title>
+  <link rel="stylesheet" href="/app.css" />
+
+  <style>
+    /* Header mínimo: solo Menú + Salir */
+    .nav .tabs a:not([href="/menu.html"]) { display:none !important; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+    .row .field { flex: 1 1 260px; }
+    .taglist { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .tag { display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid rgba(255,255,255,.12); border-radius:999px; }
+    .tag button { border:0; background:transparent; cursor:pointer; font-weight:800; padding:0 6px; }
+    .help { font-size: 13px; opacity:.85; }
+  </style>
+</head>
+
+<body class="app">
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>Correos</h1>
+    </div>
+    <nav class="nav" aria-label="Navegación">
+      <div class="tabs">
+        <a href="/menu.html" class="active">Menú</a>
+      </div>
+      <button class="btn btn-logout" data-logout onclick="logout()">Salir</button>
+    </nav>
+  </div>
+</header>
+
+<main class="main">
+  <div class="container">
+    <section class="card pad">
+      <h2 style="margin:0 0 8px 0">Reenvío de alertas de stock bajo</h2>
+      <p class="muted" style="margin-top:0">
+        Las alertas se envían desde <b id="fromEmail">...</b> al destinatario principal y, además, se reenvían (BCC) a los correos que añadas aquí.
+      </p>
+
+      <div class="card pad" style="margin-top:12px">
+        <div class="row">
+          <div class="field">
+            <label class="muted" for="primaryEmail">Destinatario principal (recibe la alerta)</label>
+            <input id="primaryEmail" class="input" type="email" placeholder="correo@dominio.com" />
+            <div class="help muted">Este sustituye a <code>EMAIL_TO</code> (si lo cambias aquí, se guarda en la base de datos).</div>
+          </div>
+          <div>
+            <button id="btnSavePrimary" class="btn">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card pad" style="margin-top:12px">
+        <div class="row">
+          <div class="field">
+            <label class="muted" for="forwardEmail">Reenviar también a (BCC)</label>
+            <input id="forwardEmail" class="input" type="email" placeholder="otrocorreo@dominio.com" />
+            <div class="help muted">Añade varios correos; puedes quitarlos cuando quieras.</div>
+          </div>
+          <div>
+            <button id="btnAddForward" class="btn">Añadir</button>
+          </div>
+        </div>
+
+        <div id="forwardList" class="taglist" aria-live="polite"></div>
+      </div>
+
+      <div id="msg" class="muted" style="margin-top:12px"></div>
+    </section>
+  </div>
+</main>
+
+<script src="/auth-ui.js"></script>
+<script>
+(async function(){
+  const msg = document.getElementById("msg");
+  const fromEmail = document.getElementById("fromEmail");
+  const primaryEmail = document.getElementById("primaryEmail");
+  const forwardEmail = document.getElementById("forwardEmail");
+  const forwardList = document.getElementById("forwardList");
+
+  function show(text, ok){
+    msg.textContent = text || "";
+    msg.style.color = ok ? "var(--ok, #7CFF7C)" : "var(--warn, #ffd18a)";
+    if(!text) msg.style.color = "";
+  }
+
+  function renderForwards(list){
+    forwardList.innerHTML = "";
+    (list || []).forEach(email => {
+      const tag = document.createElement("div");
+      tag.className = "tag";
+      tag.innerHTML = '<span>' + email + '</span>';
+      const b = document.createElement("button");
+      b.type = "button";
+      b.title = "Quitar";
+      b.textContent = "×";
+      b.addEventListener("click", () => removeForward(email));
+      tag.appendChild(b);
+      forwardList.appendChild(tag);
+    });
+    if(!list || !list.length){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No hay correos de reenvío.";
+      forwardList.appendChild(empty);
+    }
+  }
+
+  async function load(){
+    show("");
+    const r = await fetch("/api/alert-emails");
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error || "No se pudo cargar");
+    fromEmail.textContent = data.from || "(no configurado)";
+    primaryEmail.value = data.primary_to || "";
+    renderForwards(data.forwards || []);
+  }
+
+  async function savePrimary(){
+    const email = primaryEmail.value.trim();
+    show("Guardando...", true);
+    const r = await fetch("/api/alert-emails/primary", {
+      method: "PUT",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error || "No se pudo guardar");
+    renderForwards(data.forwards || []);
+    show("✅ Destinatario principal guardado.", true);
+  }
+
+  async function addForward(){
+    const email = forwardEmail.value.trim();
+    if(!email) return;
+    show("Añadiendo...", true);
+    const r = await fetch("/api/alert-emails/forwards", {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error || "No se pudo añadir");
+    forwardEmail.value = "";
+    renderForwards(data.forwards || []);
+    show("✅ Añadido.", true);
+  }
+
+  async function removeForward(email){
+    show("Quitando...", true);
+    const r = await fetch("/api/alert-emails/forwards?email=" + encodeURIComponent(email), { method:"DELETE" });
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error || "No se pudo quitar");
+    renderForwards(data.forwards || []);
+    show("✅ Quitado.", true);
+  }
+
+  document.getElementById("btnSavePrimary").addEventListener("click", (e)=>{ e.preventDefault(); savePrimary().catch(err=>show("❌ " + err.message)); });
+  document.getElementById("btnAddForward").addEventListener("click", (e)=>{ e.preventDefault(); addForward().catch(err=>show("❌ " + err.message)); });
+
+  // Enter para añadir / guardar
+  primaryEmail.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); savePrimary().catch(err=>show("❌ " + err.message)); }});
+  forwardEmail.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); addForward().catch(err=>show("❌ " + err.message)); }});
+
+  try {
+    await load();
+    show("", true);
+  } catch (e) {
+    show("❌ " + (e.message || e), false);
+  }
+})();
+</script>
+</body>
+</html>

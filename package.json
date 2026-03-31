@@ -1,0 +1,12 @@
+{
+  "name": "almacen2",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "setup": "npm --prefix backend install"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

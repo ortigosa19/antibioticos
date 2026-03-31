@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Restar antibiótico</title>
+  <link rel="stylesheet" href="/app.css" />
+
+<style>
+/* Header mínimo: solo Menú + Salir */
+.nav .tabs a:not([href="/menu.html"]) { display:none !important; }
+</style>
+
+</head>
+
+<body class="app">
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>Restar</h1>
+    </div>
+    <nav class="nav" aria-label="Navegación">
+      <div class="tabs">
+        <a href="/inicio.html" class="solo-admin">Configuración</a>
+        <a href="/salida.html">Salidas</a>
+        <a href="/view.html" class="solo-admin">Inventario</a>
+        <a href="/restar.html" class="active">Restar antibiótico</a>
+        <a href="/antibioticos.html" class="solo-admin">Antibióticos</a>
+        <a href="/menu.html">Menú</a>
+      </div>
+      <button class="btn btn-logout" data-logout onclick="logout()">Salir</button>
+    </nav>
+  </div>
+</header>
+
+<main class="container wide">
+  <div class="page stack">
+    <h1 class="page-title">Restar antibióticos (uno a uno)</h1>
+
+    <section class="card pad">
+      
+      <div class="row">
+        <div style="min-width:260px; flex: 2 1 520px;">
+          <label for="buscador">Buscar antibiótico</label>
+          <input id="buscador" type="text" placeholder="Escribe código o nombre..." disabled />
+        </div>
+
+        <div style="min-width:160px; flex: 0 0 180px;">
+          <label for="cantidad">Cantidad a restar</label>
+          <input id="cantidad" type="number" min="1" step="1" value="1" disabled />
+        </div>
+
+        <div style="align-self:end">
+          <button class="primary" id="btn" disabled>Restar</button>
+        </div>
+      </div>
+
+      <div class="tableWrap" style="margin-top:12px; max-height:360px; overflow:auto; border-radius:12px; border:1px solid rgba(255,255,255,.10);">
+        <table id="tablaAntibioticos" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:10px 12px; position:sticky; top:0; background:rgba(0,0,0,.35);">Código</th>
+              <th style="text-align:left; padding:10px 12px; position:sticky; top:0; background:rgba(0,0,0,.35);">Nombre</th>
+              <th style="text-align:left; padding:10px 12px; position:sticky; top:0; background:rgba(0,0,0,.35);">Stock</th>
+              <th style="text-align:left; padding:10px 12px; position:sticky; top:0; background:rgba(0,0,0,.35);">Mínimo</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAntibioticos"></tbody>
+        </table>
+      </div>
+        <div style="min-width:160px; flex: 0 0 180px;">
+          <label for="cantidad">Cantidad a restar</label>
+          <input id="cantidad" type="number" min="1" step="1" value="1" disabled />
+        </div>
+
+        <div style="align-self:end">
+          <button class="primary" id="btn" disabled>Restar</button>
+        </div>
+      </div>
+
+      <div class="muted" style="margin-top:10px">
+        Esta pantalla descuenta stock de <b>un antibiótico</b>. Si el stock no es suficiente, la operación se cancela.
+      </div>
+
+      <div class="status" id="status" style="margin-top:12px">
+        Estado: <span id="statusText">Cargando…</span>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div style="padding:12px 14px">
+          <div class="muted" style="margin:0 0 8px">Seleccionado</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap">
+            <div><b>Código:</b> <span id="s_codigo">—</span></div>
+            <div><b>Nombre:</b> <span id="s_nombre">—</span></div>
+            <div><b>Stock actual:</b> <span id="s_stock">—</span></div>
+            <div><b>Mínimo:</b> <span id="s_min">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav nav-duplicado" style="margin-top:12px">
+        <button class="ghost" type="button" onclick="location.href='/menu.html'">Menú</button>
+        <button class="ghost" type="button" onclick="location.href='/view.html'">Inventario</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="/auth-ui.js"></script>
+<script>
+  const API = "/api";
+  const buscador = document.getElementById("buscador");
+  const tbody = document.getElementById("tbodyAntibioticos");
+  const cantidad = document.getElementById("cantidad");
+  const btn = document.getElementById("btn");
+  const statusText = document.getElementById("statusText");
+
+  const s_codigo = document.getElementById("s_codigo");
+  const s_nombre = document.getElementById("s_nombre");
+  const s_stock  = document.getElementById("s_stock");
+  const s_min    = document.getElementById("s_min");
+
+  let items = [];
+  let selectedCodigo = null;
+
+  function setStatus(msg, type="") {
+    statusText.textContent = msg;
+    const box = document.getElementById("status");
+    box.classList.remove("ok","bad");
+    if(type) box.classList.add(type);
+  }
+  function fmt(n){ return (n === null || n === undefined) ? "—" : String(n); }
+
+  function getSelected() {
+    if (!selectedCodigo) return null;
+    return items.find(it => String(it.codigo) === String(selectedCodigo)) || null;
+  }
+
+  function paintSelectedCard() {
+    const it = getSelected();
+    s_codigo.textContent = it ? it.codigo : "—";
+    s_nombre.textContent = it ? it.nombre : "—";
+    s_stock.textContent  = it ? fmt(it.cantidad) : "—";
+    s_min.textContent    = it ? fmt(it.stock_minimo) : "—";
+
+    const ok = !!it;
+    cantidad.disabled = !ok;
+    btn.disabled = !ok;
+  }
+
+  function renderTable(list) {
+    const rows = list.map(it => {
+      const isSel = selectedCodigo && String(selectedCodigo) === String(it.codigo);
+      const trStyle = [
+        "border-bottom:1px solid rgba(255,255,255,.08)",
+        "cursor:pointer",
+        isSel ? "background:rgba(59,130,246,.18)" : ""
+      ].join(";");
+
+      return `
+        <tr data-codigo="${String(it.codigo)}" style="${trStyle}">
+          <td style="padding:10px 12px">${it.codigo}</td>
+          <td style="padding:10px 12px">${it.nombre}</td>
+          <td style="padding:10px 12px">${fmt(it.cantidad)}</td>
+          <td style="padding:10px 12px">${fmt(it.stock_minimo)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    tbody.innerHTML = rows || `<tr><td colspan="4" style="padding:12px; opacity:.7">Sin resultados</td></tr>`;
+  }
+
+  function applyFilter() {
+    const f = (buscador.value || "").trim().toLowerCase();
+    const list = !f ? items : items.filter(it =>
+      String(it.codigo).toLowerCase().includes(f) ||
+      String(it.nombre).toLowerCase().includes(f)
+    );
+    renderTable(list);
+  }
+
+  async function load() {
+    try {
+      setStatus("Cargando antibióticos…");
+      const r = await fetch(`${API}/antibioticos`);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      items = await r.json();
+      items = (Array.isArray(items) ? items : []).map(x => ({
+        codigo: x.codigo,
+        nombre: x.nombre,
+        cantidad: Number(x.cantidad ?? 0),
+        stock_minimo: Number(x.stock_minimo ?? 0)
+      }));
+      items.sort((a,b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+
+      buscador.disabled = false;
+      applyFilter();
+
+      setStatus("Listo", "ok");
+      paintSelectedCard();
+    } catch (e) {
+      console.error(e);
+      setStatus("Error cargando antibióticos: " + (e.message || e), "bad");
+    }
+  }
+
+  async function restar() {
+    const it = getSelected();
+    const n = Number(cantidad.value);
+    if (!it) return;
+
+    if (!Number.isInteger(n) || n <= 0) {
+      setStatus("Cantidad inválida", "bad");
+      return;
+    }
+
+    btn.disabled = true;
+    setStatus("Restando…");
+    try {
+      const r = await fetch(`${API}/antibioticos/${encodeURIComponent(it.codigo)}/restar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cantidad: n })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+
+      const upd = data.item;
+      const idx = items.findIndex(x => String(x.codigo) === String(upd.codigo));
+      if (idx >= 0) items[idx] = {
+        codigo: upd.codigo,
+        nombre: upd.nombre,
+        cantidad: Number(upd.cantidad ?? 0),
+        stock_minimo: Number(upd.stock_minimo ?? 0)
+      };
+
+      applyFilter();
+      setStatus(`OK: ${upd.nombre} → stock ${upd.cantidad}`, "ok");
+    } catch (e) {
+      console.error(e);
+      setStatus("Error: " + (e.message || e), "bad");
+    } finally {
+      btn.disabled = false;
+      paintSelectedCard();
+    }
+  }
+
+  // click row to select
+  tbody.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-codigo]");
+    if (!tr) return;
+    selectedCodigo = tr.getAttribute("data-codigo");
+    applyFilter();
+    paintSelectedCard();
+  });
+
+  buscador.addEventListener("input", applyFilter);
+  btn.addEventListener("click", restar);
+
+  load();
+</script>
+</body>
+</html>
