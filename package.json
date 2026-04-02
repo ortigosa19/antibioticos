@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "cd backend && node index.js"
+    "start": "cd backend && node index.js",
+    "postinstall": "cd backend && npm install"
   },
   "engines": {
     "node": ">=18"
