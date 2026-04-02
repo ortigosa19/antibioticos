@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "npm --prefix backend start",
-    "setup": "npm --prefix backend install"
+    "start": "cd backend && node index.js"
   },
   "engines": {
     "node": ">=18"
